@@ -67,29 +67,45 @@
         }
         
         .online-users h3 {
-            margin-bottom: 15px;
+            margin-bottom: 10px;
             color: #495057;
             font-size: 1em;
+        }
+
+        .online-users-hint {
+            font-size: 0.75em;
+            color: #6c757d;
+            margin-bottom: 15px;
+            font-style: italic;
         }
         
         .user-item {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 10px;
+            padding: 12px;
             margin-bottom: 5px;
             border-radius: 10px;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: all 0.2s;
+            border: 2px solid transparent;
         }
-        
+
         .user-item:hover {
             background: #e9ecef;
+            transform: translateX(5px);
+            border-color: #dee2e6;
         }
-        
+
         .user-item.selected {
-            background: #007bff;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
+            transform: translateX(5px);
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .user-item.selected .user-status {
+            background: white;
         }
         
         .user-name {
@@ -114,8 +130,14 @@
             background: white;
             border-bottom: 1px solid #dee2e6;
             display: flex;
-            align-items: center;
             justify-content: space-between;
+            align-items: center;
+        }
+
+        #backToPublicBtn:hover {
+            background: #667eea !important;
+            color: white !important;
+            transform: translateX(-3px);
         }
         
         .chat-title {
@@ -157,8 +179,11 @@
         }
         
         .message.private {
-            border-left: 4px solid #007bff;
+            border-left: 4px solid #667eea;
             padding-left: 10px;
+            background: rgba(102, 126, 234, 0.05);
+            border-radius: 8px;
+            padding: 8px;
         }
         
         .message-bubble {
@@ -209,9 +234,13 @@
         }
         
         .private-indicator {
-            font-size: 0.8em;
-            color: #007bff;
-            font-weight: bold;
+            font-size: 0.75em;
+            color: #667eea;
+            font-weight: 600;
+            background: rgba(102, 126, 234, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: inline-block;
             margin-bottom: 4px;
         }
         
@@ -222,24 +251,45 @@
         }
         
         .private-mode-indicator {
-            background: #e7f3ff;
-            border: 1px solid #b3d9ff;
-            border-radius: 8px;
-            padding: 8px 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 12px 16px;
             margin-bottom: 10px;
-            font-size: 0.9em;
-            color: #0056b3;
+            font-size: 0.95em;
             display: none;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
         }
-        
+
         .private-mode-indicator.show {
-            display: block;
+            display: flex;
         }
-        
+
+        .private-mode-indicator #privateRecipient {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .private-mode-indicator #privateRecipient::before {
+            content: "🔒";
+            font-size: 1.2em;
+        }
+
         .close-private {
-            float: right;
             cursor: pointer;
             font-weight: bold;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 4px 10px;
+            border-radius: 5px;
+            transition: background 0.2s;
+        }
+
+        .close-private:hover {
+            background: rgba(255, 255, 255, 0.3);
         }
         
         .input-wrapper {
@@ -263,7 +313,13 @@
         }
         
         .message-input.private-mode {
-            border-color: #007bff;
+            border: 2px solid #667eea;
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        .message-input.private-mode::placeholder {
+            color: #667eea;
+            font-weight: 500;
         }
         
         .send-btn {
@@ -352,9 +408,17 @@
     <div class="chat-app">
         <div class="login-overlay" id="loginOverlay">
             <div class="login-form">
-                <h2>💬 Join the Chat</h2>
-                <input type="text" id="usernameInput" placeholder="Enter your username" maxlength="20">
-                <button onclick="connect()">Join Chat</button>
+                <h2 id="authTitle">💬 Login to Chat</h2>
+                <div id="errorMessage" style="color: #dc3545; margin-bottom: 10px; display: none;"></div>
+                <input type="text" id="usernameInput" placeholder="Username" maxlength="20">
+                <input type="password" id="passwordInput" placeholder="Password" minlength="6">
+                <button onclick="handleAuth()" id="authButton">Login</button>
+                <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
+                    <span id="switchText">Don't have an account?</span>
+                    <a href="#" onclick="toggleAuthMode(); return false;" style="color: #667eea; font-weight: bold;">
+                        <span id="switchLink">Register</span>
+                    </a>
+                </p>
             </div>
         </div>
         
@@ -368,6 +432,7 @@
             
             <div class="online-users">
                 <h3>Online Users (<span id="userCount">0</span>)</h3>
+                <div class="online-users-hint">💬 Click on a user to start private chat</div>
                 <div id="userList"></div>
             </div>
         </div>
@@ -378,6 +443,9 @@
                     <div class="chat-title" id="chatTitle">Public Chat</div>
                     <div class="chat-subtitle" id="chatSubtitle">Everyone can see these messages</div>
                 </div>
+                <button id="backToPublicBtn" onclick="exitPrivateMode()" style="display: none; padding: 8px 16px; background: white; border: 2px solid #667eea; color: #667eea; border-radius: 8px; cursor: pointer; font-weight: 600; transition: all 0.2s;">
+                    ← Back to Public
+                </button>
             </div>
             
             <div class="chat-messages" id="chatMessages"></div>
@@ -400,39 +468,146 @@
         let ws = null;
         let username = '';
         let currentPrivateRecipient = null;
-        
-        function connect() {
-            username = document.getElementById('usernameInput').value.trim();
-            
-            if (!username) {
-                alert('Please enter a username');
+        let authToken = null;
+        let isLoginMode = true;
+
+        // Check for existing token on page load
+        window.onload = function() {
+            const token = localStorage.getItem('authToken');
+            const savedUsername = localStorage.getItem('username');
+            if (token && savedUsername) {
+                authToken = token;
+                username = savedUsername;
+                connect();
+            }
+        };
+
+        function toggleAuthMode() {
+            isLoginMode = !isLoginMode;
+            const title = document.getElementById('authTitle');
+            const button = document.getElementById('authButton');
+            const switchText = document.getElementById('switchText');
+            const switchLink = document.getElementById('switchLink');
+
+            if (isLoginMode) {
+                title.textContent = '💬 Login to Chat';
+                button.textContent = 'Login';
+                switchText.textContent = "Don't have an account?";
+                switchLink.textContent = 'Register';
+            } else {
+                title.textContent = '💬 Register Account';
+                button.textContent = 'Register';
+                switchText.textContent = 'Already have an account?';
+                switchLink.textContent = 'Login';
+            }
+            hideError();
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function hideError() {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.style.display = 'none';
+        }
+
+        async function handleAuth() {
+            const usernameInput = document.getElementById('usernameInput').value.trim();
+            const passwordInput = document.getElementById('passwordInput').value;
+
+            if (!usernameInput || !passwordInput) {
+                showError('Please enter username and password');
                 return;
             }
-            
-            ws = new WebSocket(`ws://localhost:8080/ws?username=${encodeURIComponent(username)}`);
-            
+
+            if (passwordInput.length < 6) {
+                showError('Password must be at least 6 characters');
+                return;
+            }
+
+            const endpoint = isLoginMode ? '/login' : '/register';
+            const data = {
+                username: usernameInput,
+                password: passwordInput
+            };
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    authToken = result.token;
+                    username = usernameInput;
+                    localStorage.setItem('authToken', authToken);
+                    localStorage.setItem('username', username);
+                    hideError();
+                    connect();
+                } else {
+                    showError(result.message);
+                }
+            } catch (error) {
+                console.error('Auth error:', error);
+                showError('Connection error. Please try again.');
+            }
+        }
+
+        function connect() {
+            if (!authToken) {
+                showError('No authentication token');
+                return;
+            }
+
+            ws = new WebSocket(`ws://localhost:8080/ws?token=${encodeURIComponent(authToken)}`);
+
             ws.onopen = function() {
                 document.getElementById('loginOverlay').classList.add('hidden');
                 document.getElementById('currentUser').textContent = username;
                 updateConnectionStatus(true);
                 document.getElementById('messageInput').focus();
             };
-            
+
             ws.onmessage = function(event) {
                 const message = JSON.parse(event.data);
                 displayMessage(message);
             };
-            
+
             ws.onclose = function() {
                 updateConnectionStatus(false);
-                document.getElementById('loginOverlay').classList.remove('hidden');
-                document.getElementById('usernameInput').value = '';
+                // Don't show login overlay immediately - might be temporary disconnect
+                setTimeout(() => {
+                    if (!ws || ws.readyState === WebSocket.CLOSED) {
+                        document.getElementById('loginOverlay').classList.remove('hidden');
+                    }
+                }, 1000);
             };
-            
+
             ws.onerror = function(error) {
                 console.error('WebSocket error:', error);
-                alert('Connection error. Please try again.');
+                showError('Connection error. Please check your credentials.');
             };
+        }
+
+        function logout() {
+            localStorage.removeItem('authToken');
+            localStorage.removeItem('username');
+            authToken = null;
+            username = '';
+            if (ws) {
+                ws.close();
+            }
+            document.getElementById('loginOverlay').classList.remove('hidden');
+            document.getElementById('usernameInput').value = '';
+            document.getElementById('passwordInput').value = '';
         }
         
         function updateConnectionStatus(connected) {
@@ -502,9 +677,9 @@
             let privateIndicator = '';
             if (message.type === 'private') {
                 if (message.username === username) {
-                    privateIndicator = `<div class="private-indicator">Private to ${escapeHtml(message.to)}</div>`;
+                    privateIndicator = `<div class="private-indicator">🔒 Private to ${escapeHtml(message.to)}</div>`;
                 } else {
-                    privateIndicator = `<div class="private-indicator">Private from ${escapeHtml(message.from)}</div>`;
+                    privateIndicator = `<div class="private-indicator">🔒 Private from ${escapeHtml(message.from)}</div>`;
                 }
             }
             
@@ -539,22 +714,24 @@
         
         function startPrivateChat(recipientUsername) {
             currentPrivateRecipient = recipientUsername;
-            
+
             // Update UI to show private mode
             const indicator = document.getElementById('privateModeIndicator');
             const recipient = document.getElementById('privateRecipient');
             const messageInput = document.getElementById('messageInput');
             const chatTitle = document.getElementById('chatTitle');
             const chatSubtitle = document.getElementById('chatSubtitle');
-            
+            const backBtn = document.getElementById('backToPublicBtn');
+
             indicator.classList.add('show');
             recipient.textContent = `Private chat with ${recipientUsername}`;
             messageInput.classList.add('private-mode');
             messageInput.placeholder = `Send a private message to ${recipientUsername}...`;
-            
+
             chatTitle.textContent = `Private Chat`;
-            chatSubtitle.textContent = `Only you and ${recipientUsername} can see these messages`;
-            
+            chatSubtitle.textContent = `🔒 Only you and ${recipientUsername} can see these messages`;
+            backBtn.style.display = 'block';
+
             // Highlight selected user
             document.querySelectorAll('.user-item').forEach(item => {
                 item.classList.remove('selected');
@@ -562,26 +739,28 @@
                     item.classList.add('selected');
                 }
             });
-            
+
             messageInput.focus();
         }
         
         function exitPrivateMode() {
             currentPrivateRecipient = null;
-            
+
             // Update UI to show public mode
             const indicator = document.getElementById('privateModeIndicator');
             const messageInput = document.getElementById('messageInput');
             const chatTitle = document.getElementById('chatTitle');
             const chatSubtitle = document.getElementById('chatSubtitle');
-            
+            const backBtn = document.getElementById('backToPublicBtn');
+
             indicator.classList.remove('show');
             messageInput.classList.remove('private-mode');
             messageInput.placeholder = 'Type your message...';
-            
+
             chatTitle.textContent = 'Public Chat';
             chatSubtitle.textContent = 'Everyone can see these messages';
-            
+            backBtn.style.display = 'none';
+
             // Remove selection from users
             document.querySelectorAll('.user-item').forEach(item => {
                 item.classList.remove('selected');
@@ -602,10 +781,16 @@
             }
         }
         
-        // Handle enter key on username input
+        // Handle enter key on username and password inputs
         document.getElementById('usernameInput').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
-                connect();
+                handleAuth();
+            }
+        });
+
+        document.getElementById('passwordInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                handleAuth();
             }
         });
     </script>

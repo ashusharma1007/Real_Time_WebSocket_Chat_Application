@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Collaborative Code Editor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .editor-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 250px;
+            background: #252526;
+            border-right: 1px solid #3e3e42;
+            color: #cccccc;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 15px;
+            background: #2d2d30;
+            border-bottom: 1px solid #3e3e42;
+            font-weight: bold;
+        }
+
+        .file-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background 0.2s;
+        }
+
+        .file-item:hover {
+            background: #2a2d2e;
+        }
+
+        .file-item.active {
+            background: #37373d;
+            border-left: 2px solid #007acc;
+        }
+
+        .main-editor {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .editor-header {
+            height: 40px;
+            background: #2d2d30;
+            border-bottom: 1px solid #3e3e42;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 15px;
+            color: #cccccc;
+        }
+
+        .current-file {
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .active-users {
+            display: flex;
+            gap: 10px;
+        }
+
+        .user-badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            color: white;
+        }
+
+        #editor {
+            flex: 1;
+        }
+
+        .login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .login-overlay.hidden {
+            display: none;
+        }
+
+        .login-form {
+            background: white;
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            min-width: 350px;
+        }
+
+        .login-form h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .login-form input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        .login-form button {
+            width: 100%;
+            padding: 12px;
+            background: #007acc;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .login-form button:hover {
+            background: #005a9e;
+        }
+
+        .error-message {
+            color: #dc3545;
+            margin-bottom: 10px;
+            display: none;
+        }
+
+        .new-file-btn {
+            margin: 15px;
+            padding: 10px;
+            background: #007acc;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .new-file-btn:hover {
+            background: #005a9e;
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Overlay -->
+    <div class="login-overlay" id="loginOverlay">
+        <div class="login-form">
+            <h2 id="authTitle">💻 Login to Editor</h2>
+            <div class="error-message" id="errorMessage"></div>
+            <input type="text" id="usernameInput" placeholder="Username">
+            <input type="password" id="passwordInput" placeholder="Password" minlength="6">
+            <button onclick="handleAuth()" id="authButton">Login</button>
+            <p style="margin-top: 15px; text-align: center; font-size: 0.9em;">
+                <span id="switchText">Don't have an account?</span>
+                <a href="#" onclick="toggleAuthMode(); return false;" style="color: #007acc; font-weight: bold;">
+                    <span id="switchLink">Register</span>
+                </a>
+            </p>
+        </div>
+    </div>
+
+    <!-- Main Editor Container -->
+    <div class="editor-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                📁 FILES
+            </div>
+            <button class="new-file-btn" onclick="createNewFile()">+ New File</button>
+            <div id="fileList">
+                <!-- Files will be listed here -->
+            </div>
+        </div>
+
+        <!-- Main Editor -->
+        <div class="main-editor">
+            <!-- Header -->
+            <div class="editor-header">
+                <div class="current-file" id="currentFile">
+                    <span>📄</span>
+                    <span>No file open</span>
+                </div>
+                <div class="active-users" id="activeUsers">
+                    <!-- Active users will appear here -->
+                </div>
+            </div>
+
+            <!-- Monaco Editor Container -->
+            <div id="editor"></div>
+        </div>
+    </div>
+
+    <!-- Load Monaco Editor from CDN -->
+    <script src="https://unpkg.com/monaco-editor@0.44.0/min/vs/loader.js"></script>
+
+    <script>
+        // ========================================
+        // GLOBAL VARIABLES
+        // ========================================
+        let editor = null;
+        let ws = null;
+        let username = '';
+        let authToken = null;
+        let isLoginMode = true;
+        let currentDocument = null;
+        let isApplyingRemoteChange = false;  // Flag to prevent sending own changes back
+
+        // ========================================
+        // STEP 1: AUTHENTICATION FUNCTIONS
+        // ========================================
+
+        function toggleAuthMode() {
+            isLoginMode = !isLoginMode;
+            const title = document.getElementById('authTitle');
+            const button = document.getElementById('authButton');
+            const switchText = document.getElementById('switchText');
+            const switchLink = document.getElementById('switchLink');
+
+            if (isLoginMode) {
+                title.textContent = '💻 Login to Editor';
+                button.textContent = 'Login';
+                switchText.textContent = "Don't have an account?";
+                switchLink.textContent = 'Register';
+            } else {
+                title.textContent = '💻 Register Account';
+                button.textContent = 'Register';
+                switchText.textContent = 'Already have an account?';
+                switchLink.textContent = 'Login';
+            }
+            hideError();
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function hideError() {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.style.display = 'none';
+        }
+
+        async function handleAuth() {
+            const usernameInput = document.getElementById('usernameInput').value.trim();
+            const passwordInput = document.getElementById('passwordInput').value;
+
+            if (!usernameInput || !passwordInput) {
+                showError('Please enter username and password');
+                return;
+            }
+
+            if (passwordInput.length < 6) {
+                showError('Password must be at least 6 characters');
+                return;
+            }
+
+            const endpoint = isLoginMode ? '/login' : '/register';
+            const data = {
+                username: usernameInput,
+                password: passwordInput
+            };
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    authToken = result.token;
+                    username = usernameInput;
+                    localStorage.setItem('authToken', authToken);
+                    localStorage.setItem('username', username);
+                    hideError();
+
+                    // Hide login overlay
+                    document.getElementById('loginOverlay').classList.add('hidden');
+
+                    // Initialize editor and connect
+                    initializeEditor();
+                    connect();
+                } else {
+                    showError(result.message);
+                }
+            } catch (error) {
+                console.error('Auth error:', error);
+                showError('Connection error. Please try again.');
+            }
+        }
+
+        // Handle Enter key on login form
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('usernameInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') handleAuth();
+            });
+            document.getElementById('passwordInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') handleAuth();
+            });
+        });
+
+        // ========================================
+        // STEP 2: INITIALIZE MONACO EDITOR
+        // ========================================
+
+        function initializeEditor() {
+            require.config({ paths: { vs: 'https://unpkg.com/monaco-editor@0.44.0/min/vs' }});
+
+            require(['vs/editor/editor.main'], function() {
+                editor = monaco.editor.create(document.getElementById('editor'), {
+                    value: '// Welcome to the Collaborative Code Editor!\n// Login and start coding with others in real-time.\n\nfunction hello() {\n    console.log("Hello, World!");\n}\n',
+                    language: 'javascript',
+                    theme: 'vs-dark',
+                    fontSize: 14,
+                    minimap: { enabled: true },
+                    automaticLayout: true,
+                    scrollBeyondLastLine: false,
+                });
+
+                console.log('Monaco Editor initialized!');
+
+                // Listen to content changes
+                editor.onDidChangeModelContent((e) => {
+                    // Don't send changes if we're applying remote changes
+                    if (isApplyingRemoteChange) {
+                        return;
+                    }
+
+                    // Don't send if no document is open
+                    if (!currentDocument) {
+                        return;
+                    }
+
+                    // Send the full content (simple approach)
+                    const content = editor.getValue();
+
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({
+                            type: 'doc-update',
+                            documentID: currentDocument,
+                            content: content
+                        }));
+                    }
+                });
+
+                // Listen to cursor position changes
+                editor.onDidChangeCursorPosition((e) => {
+                    console.log('Cursor moved to:', e.position);
+                    // TODO: We'll broadcast cursor position in next step
+                });
+            });
+        }
+
+        // ========================================
+        // STEP 3: WEBSOCKET CONNECTION
+        // ========================================
+
+        function connect() {
+            if (!authToken) {
+                showError('No authentication token');
+                return;
+            }
+
+            ws = new WebSocket(`ws://localhost:8080/ws?token=${encodeURIComponent(authToken)}`);
+
+            ws.onopen = function() {
+                console.log('WebSocket connected!');
+                // Request list of available documents
+                requestDocumentList();
+            };
+
+            ws.onmessage = function(event) {
+                const message = JSON.parse(event.data);
+                handleMessage(message);
+            };
+
+            ws.onclose = function() {
+                console.log('WebSocket disconnected');
+                setTimeout(() => {
+                    if (!ws || ws.readyState === WebSocket.CLOSED) {
+                        console.log('Attempting to reconnect...');
+                        connect();
+                    }
+                }, 3000);
+            };
+
+            ws.onerror = function(error) {
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        // ========================================
+        // STEP 4: MESSAGE HANDLING
+        // ========================================
+
+        function handleMessage(message) {
+            console.log('Received message:', message);
+
+            switch(message.type) {
+                case 'doc-list':
+                    displayDocumentList(message.documents);
+                    break;
+                case 'doc-content':
+                    loadDocumentContent(message);
+                    break;
+                case 'doc-update':
+                    applyRemoteEdit(message);
+                    break;
+                case 'user-joined':
+                    addUser(message.username, message.color);
+                    break;
+                case 'user-left':
+                    removeUser(message.username);
+                    break;
+                default:
+                    console.log('Unknown message type:', message.type);
+            }
+        }
+
+        function applyRemoteEdit(message) {
+            // Only apply if it's for the current document
+            if (message.documentID !== currentDocument) {
+                return;
+            }
+
+            if (!editor) {
+                return;
+            }
+
+            console.log('Applying remote edit from:', message.username);
+
+            // Set flag to prevent sending this change back
+            isApplyingRemoteChange = true;
+
+            // Save cursor position
+            const position = editor.getPosition();
+
+            // Update editor content
+            editor.setValue(message.content);
+
+            // Restore cursor position
+            if (position) {
+                editor.setPosition(position);
+            }
+
+            // Reset flag
+            isApplyingRemoteChange = false;
+        }
+
+        // ========================================
+        // STEP 5: DOCUMENT MANAGEMENT
+        // ========================================
+
+        function requestDocumentList() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'doc-list'
+                }));
+            }
+        }
+
+        function displayDocumentList(documents) {
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '';
+
+            if (!documents || documents.length === 0) {
+                fileList.innerHTML = '<div style="padding: 15px; color: #858585; font-size: 0.9em;">No files yet. Create one!</div>';
+                return;
+            }
+
+            documents.forEach(doc => {
+                const fileItem = document.createElement('div');
+                fileItem.className = 'file-item';
+                fileItem.onclick = () => openDocument(doc.id);
+
+                const icon = getFileIcon(doc.language);
+                fileItem.innerHTML = `<span>${icon}</span><span>${doc.name}</span>`;
+
+                fileList.appendChild(fileItem);
+            });
+        }
+
+        function getFileIcon(language) {
+            const icons = {
+                'javascript': '📜',
+                'typescript': '📘',
+                'python': '🐍',
+                'go': '🔵',
+                'java': '☕',
+                'html': '🌐',
+                'css': '🎨',
+                'json': '📋',
+                'markdown': '📝'
+            };
+            return icons[language] || '📄';
+        }
+
+        function openDocument(docId) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'doc-open',
+                    documentID: docId
+                }));
+            }
+        }
+
+        function loadDocumentContent(message) {
+            currentDocument = message.documentID;
+
+            // Update UI
+            document.getElementById('currentFile').innerHTML = `
+                <span>${getFileIcon(message.language)}</span>
+                <span>${message.name}</span>
+            `;
+
+            // Set content in editor
+            if (editor) {
+                editor.setValue(message.content || '');
+                monaco.editor.setModelLanguage(editor.getModel(), message.language || 'plaintext');
+            }
+
+            // Highlight active file in sidebar
+            document.querySelectorAll('.file-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.target.closest('.file-item')?.classList.add('active');
+        }
+
+        function createNewFile() {
+            const fileName = prompt('Enter file name (e.g., main.js, app.py):');
+            if (!fileName) return;
+
+            const language = detectLanguage(fileName);
+
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    type: 'doc-create',
+                    name: fileName,
+                    language: language
+                }));
+            }
+        }
+
+        function detectLanguage(fileName) {
+            const ext = fileName.split('.').pop().toLowerCase();
+            const langMap = {
+                'js': 'javascript',
+                'ts': 'typescript',
+                'py': 'python',
+                'go': 'go',
+                'java': 'java',
+                'html': 'html',
+                'css': 'css',
+                'json': 'json',
+                'md': 'markdown'
+            };
+            return langMap[ext] || 'plaintext';
+        }
+
+        // ========================================
+        // STEP 6: USER PRESENCE
+        // ========================================
+
+        function addUser(username, color) {
+            const activeUsers = document.getElementById('activeUsers');
+
+            // Check if user already exists
+            if (document.getElementById(`user-${username}`)) return;
+
+            const userBadge = document.createElement('div');
+            userBadge.id = `user-${username}`;
+            userBadge.className = 'user-badge';
+            userBadge.style.background = color || '#007acc';
+            userBadge.textContent = username;
+
+            activeUsers.appendChild(userBadge);
+        }
+
+        function removeUser(username) {
+            const userBadge = document.getElementById(`user-${username}`);
+            if (userBadge) {
+                userBadge.remove();
+            }
+        }
+
+        // ========================================
+        // PAGE LOAD
+        // ========================================
+
+        window.onload = function() {
+            const token = localStorage.getItem('authToken');
+            const savedUsername = localStorage.getItem('username');
+
+            if (token && savedUsername) {
+                authToken = token;
+                username = savedUsername;
+                document.getElementById('loginOverlay').classList.add('hidden');
+                initializeEditor();
+                connect();
+            }
+        };
+    </script>
+</body>
+</html>
